@@ -261,16 +261,25 @@ void predictPressure(float Pcur, long cur_time) {
   }
 }
 
-//    getting data from the analog arduino pin - default A0 using TEST param for local testing without sensor.....
-int getAnalogData(byte sensor) {
 
-  //try to check simulation.....
-  analogV = analogRead(sensor);
- 
-  return analogV;
-
+uint16_t getAnalogData(uint8_t pin){
+    const uint8_t SIZE_BUF_ADC = 5;
+    uint16_t buf_adc[SIZE_BUF_ADC], t;
+    uint8_t i, j;
+    for (i=0; i<SIZE_BUF_ADC; i++){
+        buf_adc[i] = analogRead(pin);
+    }
+    for (i=0; i<SIZE_BUF_ADC; i++){
+        for (j=0; j<SIZE_BUF_ADC-i-1; j++){
+            if (buf_adc[j] > buf_adc[j+1]){
+                t = buf_adc[j];
+                buf_adc[j] = buf_adc[j+1];
+                buf_adc[j+1] = t;
+            }
+        }
+    }
+    return buf_adc[(SIZE_BUF_ADC-1)/2];
 }
-
 
 //    check box buttons
 void checkButtons(long cur_time) {
