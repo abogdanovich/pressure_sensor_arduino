@@ -1,6 +1,5 @@
 // -------------------------------------------------
 //      digital pressure instead of mechanic 
-//      author: Alex Bogdanovich | bogdanovich.alex[at]gmail.com
 // -------------------------------------------------
 
 #include <Wire.h>
@@ -17,10 +16,10 @@
 #define sensor A0   
 #define dV 0.004    //5/1023 - each 5V via analog signal
 #define dP 0.40     //default 0.4 signal from sensor
-#define Pcorrection 0.3 //sensor correction
+#define Pcorrection 0.2 //sensor correction
 #define Pmin 2.0    //min for LOW level
 #define Pmax 4.0    //max for HIGH level 
-#define TEST false  //testing purpose without sensor
+
 //-----------------------------
 
 //init libs zone--------------
@@ -29,17 +28,14 @@ LiquidCrystal_I2C lcd(0x27, 16, 2); // Устанавливаем дисплей
 
 bool b1Status = false;
 bool b2Status = false;
-float test_inc = -0.01;
 bool working = false;
 bool SYSTEM_ERROR = false;
-int addr = 0;
-float lowIndex = 0.05;
-
-signed long cur_time = 0;
-signed long old_time = 0;
-signed long old_time2 = 0;
-signed long test_millis = 0;
-signed long prev_predict = 0; //start working
+uint8_t addr = 0;
+unsigned long cur_time = 0;
+unsigned long old_time = 0;
+unsigned long old_time2 = 0;
+unsigned long test_millis = 0;
+unsigned long prev_predict = 0; //start working
 
 //-----------------------------------
 float P_low = 1.8;
@@ -48,9 +44,7 @@ float P_high = 2.9;
 float P_c = 0.0; //current pressure
 float Pprev = 0.0;
 float Vout = 0.0; //current pressure
-int analogV = 0;
-float HALF_HYDRO_TANK = P_low + ((P_high - P_low) / 2);
-float tempindex = lowIndex;
+uint16_t analogV = 0;
 //--------------------------------
 
 void setup() {
@@ -59,13 +53,10 @@ void setup() {
 
   //  try to load variables from EEPPROM arduino
   P_low = readDATA(0);
-//  Serial.println(P_low);
   if (P_low == 0.0) P_low = 1.8;
   
   P_high = readDATA(1);
-//  Serial.println(P_high);
   if (P_high == 0.0) P_high = 2.9;
-
   
   cur_time = millis(); 
   
@@ -78,19 +69,12 @@ void setup() {
   pinMode(relay, OUTPUT);
   pinMode(sensor, INPUT);
 
-  if (TEST) {
-    analogV = 100;
-    P_c = P_high;
-  }
-
-  analogV = getAnalogData(sensor);
+  analogV = getAnalogData();
   Vout = (analogV * dV) - dP;
   P_c = getPressure(analogV, cur_time);
   Pprev = P_c;
 
-  if (Vout < 0) {
-    Vout = 0.0;
-  }
+  if (Vout < 0) Vout = 0.0;
   
   lcd.init();
   lcd.backlight();// Включаем подсветку дисплея
@@ -102,22 +86,20 @@ void setup() {
   digitalWrite(ledR, LOW);
 
   test_millis = cur_time;
-  prev_predict = cur_time;
 }
 void loop() {
 
   cur_time = millis();
   
   //regular get sensor data
-  if (!TEST) analogV = getAnalogData(sensor);
+  analogV = getAnalogData();
   checkSensorHealth(analogV);
 
   //false means that we do not switch ON relay according to predict....
   //checking and geting other functions
   if (!SYSTEM_ERROR) {
-    checkPressure(false);
+    checkPressure();
     getPressure(analogV, cur_time);
-    predictPressure(P_c, cur_time);
   }
   drawMenu();
   checkButtons(cur_time);
@@ -135,16 +117,21 @@ void drawMenu() {
 
   if (!SYSTEM_ERROR) {
 
-    lcd.setCursor(0, 1); //x,y
-    lcd.print(lowIndex);
-    lcd.setCursor(6, 1); //x,y
-    
-    float blok = ((P_high-P_low))/10; //one block
-    int blocks = (P_c - P_low) / blok;
+    float blok = ((P_high-P_low))/16; //one block
+    uint8_t blocks = (P_c - P_low) / blok;
+
+    for (uint8_t i=16; i>blocks; i--) {
+      lcd.setCursor(i, 1); //x,y
+      lcd.write(254); //total hours working
+    }
 
     //  draw blocks on LCD
-    for (int i=0; i<blocks; i++) lcd.write(255); //total hours working
-    for (int i=0; i<10; i++) lcd.write(254); //total hours working
+    for (uint8_t i=0; i<blocks; i++) {
+      lcd.setCursor(i, 1); //x,y
+      lcd.write(255); //total hours working
+    }
+    
+    
 
   }
 
@@ -156,42 +143,19 @@ void drawMenu() {
 }
 
 //    calc pressure from converted analog signal
-float getPressure(int analog, long cur_time) {
+float getPressure(uint16_t analog, unsigned long cur_time) {
 
-  if (TEST) {
-    if (cur_time - test_millis >= 2000) {
-      //Serial.println(test_inc);
-      if (working) {
-        test_inc = 0.1;
-      }
-      else {
-        if (P_c <= P_low) {
-          test_inc = 0.01;
-        }
-        else if (P_c >= P_high) {
-          test_inc = -0.01;
-        }
-      }
-      test_millis = cur_time;
-      P_c += test_inc;
-    }
-  }
-
-  else {
-    Vout = (analog * dV) - dP;
-  if (Vout < 0) {
-      Vout = 0.0;
-    }
-    P_c = ((11.5 * Vout + 2.25) / 4.5) + Pcorrection;
-  }
+  Vout = (analog * dV) - dP;
+  if (Vout < 0) Vout = 0.0;
+  P_c = ((11.5 * Vout + 2.25) / 4.5) + Pcorrection;
   
   return P_c;
 
 }
 
 //    stop relay in case if sensor through the data less that normal and default 100 from A0 pin....
-void checkSensorHealth(int analog) {
-  if (analog <= 50 and !SYSTEM_ERROR) {
+void checkSensorHealth(uint16_t analog) {
+  if ((analog <= 50) and !SYSTEM_ERROR) {
     digitalWrite(ledR, HIGH);
     digitalWrite(relay, LOW); //switch OFF relay incase of error
     SYSTEM_ERROR = true;
@@ -202,7 +166,7 @@ void checkSensorHealth(int analog) {
 }
 
 //    alarm error
-void alarmErorr() {
+void alarmErorr(void) {
   if (SYSTEM_ERROR) {
     digitalWrite(ledR, !digitalRead(ledR));
     if (working) {
@@ -217,9 +181,9 @@ void alarmErorr() {
 
 
 //    check and control main relay using predict param in case of prediction.....
-void checkPressure(bool predict) {
+void checkPressure() {
   
-  if ((P_c <= P_low) or predict) {
+  if (P_c <= P_low) {
     digitalWrite(ledG, HIGH);
     digitalWrite(relay, HIGH);
     working = true;
@@ -229,60 +193,47 @@ void checkPressure(bool predict) {
     digitalWrite(relay, LOW);
     working = false;
     digitalWrite(ledY, LOW); //switch ON predict LED
-    Pprev = P_c; //need to update Pprev because of full tank
   }
 
 }
 
 
-//    predict pressure quick falling using adopted lowIndex param
-void predictPressure(float Pcur, long cur_time) {
-  //check each second
-  if ((cur_time - prev_predict) >= 9000 and (!working)) {
-      
-    //in case when we we have a halt of boil
-    if (Pcur <= HALF_HYDRO_TANK) {
-      
-      tempindex = (Pprev - Pcur);
+//    getting data from the analog arduino pin - default A0 using
+uint16_t getAnalogData(void) {
 
-      if ((tempindex <= lowIndex) and tempindex > 0.01) {
-        
-        //quickly lowest pressure ~-0.2Bar per second
-        //predic and switch ON relay
-        //save a new lowindex and start
-        lowIndex = tempindex;
-        checkPressure(true); //call predict TRUE and turn ON relay :)
-        digitalWrite(ledY, HIGH); //switch ON predict LED
+  const uint8_t SIZE_BUF_ADC = 5;
+  uint16_t buf_adc[SIZE_BUF_ADC], t;
+  uint8_t i, j;
 
+  for (i = 0; i<SIZE_BUF_ADC; i++) {
+    buf_adc[i] = analogRead(sensor);
+  }
+
+  //take mediana from buffer
+
+   for (i = 0; i<SIZE_BUF_ADC; i++) {
+
+    for (j = 0; j<SIZE_BUF_ADC-i-1; j++) {
+      if (buf_adc[j] > buf_adc[j+1]) {
+        t = buf_adc[j];
+        buf_adc[j] = buf_adc[j+1];
+        buf_adc[j+1] = t;
       }
-      Pprev = Pcur;
-    }  
-    prev_predict = cur_time;
-  }
+    }
+   }
+
+   return buf_adc[(SIZE_BUF_ADC-1)/2];
+
+  //try to check simulation.....
+  //analogV = analogRead(sensor);
+ 
+  //return analogV;
+
 }
 
-
-uint16_t getAnalogData(uint8_t pin){
-    const uint8_t SIZE_BUF_ADC = 5;
-    uint16_t buf_adc[SIZE_BUF_ADC], t;
-    uint8_t i, j;
-    for (i=0; i<SIZE_BUF_ADC; i++){
-        buf_adc[i] = analogRead(pin);
-    }
-    for (i=0; i<SIZE_BUF_ADC; i++){
-        for (j=0; j<SIZE_BUF_ADC-i-1; j++){
-            if (buf_adc[j] > buf_adc[j+1]){
-                t = buf_adc[j];
-                buf_adc[j] = buf_adc[j+1];
-                buf_adc[j+1] = t;
-            }
-        }
-    }
-    return buf_adc[(SIZE_BUF_ADC-1)/2];
-}
 
 //    check box buttons
-void checkButtons(long cur_time) {
+void checkButtons(unsigned long cur_time) {
 
   if (digitalRead(b1) and ((cur_time - old_time) > 200) and !b1Status) {
 
@@ -330,12 +281,11 @@ void checkButtons(long cur_time) {
 
 }
 
-float readDATA(byte addr) {
-
+float readDATA(uint8_t addr) {
   return (float)EEPROM.read(addr)/10.0;  
 }
 
-void saveDATA(byte addr, byte data) {
+void saveDATA(uint8_t addr, uint8_t data) {
   
   EEPROM.write(addr, data);
   
