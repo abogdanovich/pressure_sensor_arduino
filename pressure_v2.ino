@@ -12,7 +12,7 @@
 #define dV 0.004    //5/1023 - each 5V via analog signal
 #define PRESSURE_CORRECTION 0.4 //sensor correction
 #define PMIN 2.0    //min for LOW level
-#define PMAX 4.0    //max for HIGH level 
+#define PMAX 3.0    //max for HIGH level 
 #define MAX_LCD_WIDTH 16
 
 #include <Wire.h>
@@ -42,7 +42,7 @@ uint16_t analogV = 0; //analog signal value
 /**
  * setup method that allows to init system
  */
-public void setup() {
+void setup() {
   //
   Serial.begin(115200);
 
@@ -79,7 +79,7 @@ public void setup() {
 
   test_millis = current_time;
 }
-public void loop() {
+void loop() {
 
   current_time = millis();
 
@@ -99,7 +99,7 @@ public void loop() {
 /**
  * update menu items
  */
-public void drawMenu() {
+void drawMenu() {
 
   lcd.setCursor(0, 0); //x,y
   lcd.print(LOW_PRESSURE);
@@ -132,7 +132,7 @@ public void drawMenu() {
 /**
  * calc pressure from converted analog signal
  */
-public float getPressure(uint16_t analog) {
+float getPressure(uint16_t analog) {
   Vout = (analog * dV);
   //updated formula according to:
   // 0.4 - 0bar
@@ -146,7 +146,7 @@ public float getPressure(uint16_t analog) {
 /**
  * stop RELAY in case if sensor throws the data less that normal 
  */
-public void checkSensorHealth(uint16_t analog) {
+void checkSensorHealth(uint16_t analog) {
   if ((analog <= 50) or (analog >= 800) and !(SYSTEM_ERROR)) { //800~ its like ~7.5bar
     ON(ledR);
     OFF(RELAY);
@@ -158,7 +158,7 @@ public void checkSensorHealth(uint16_t analog) {
 }
 
 //    alarm error
-public void alarmErorr(void) {
+void alarmErorr(void) {
   if (SYSTEM_ERROR) {
     ON(ledR);
     if (working) {
@@ -172,7 +172,7 @@ public void alarmErorr(void) {
 /**
  * check and control main RELAY
  */
-public void checkPressure() {
+void checkPressure() {
   if (CURRENT_PRESSURE <= LOW_PRESSURE) {
     ON(ledG);
     ON(RELAY);
@@ -191,7 +191,7 @@ public void checkPressure() {
  * get data from the analog arduino pin 
  * default A0 using TEST param for local testing without sensor.....
  */
-public uint16_t getAnalogData(void) {
+uint16_t getAnalogData(void) {
   const uint8_t SIZE_BUF_ADC = 5;
   uint16_t buf_adc[SIZE_BUF_ADC];
   uint16_t t;
@@ -217,14 +217,14 @@ public uint16_t getAnalogData(void) {
 /**
  * check buttons state for PMIN and PMAX corection
  */
-public void checkButtons(unsigned long current_time) {
+void checkButtons(unsigned long current_time) {
 
   if (digitalRead(b1) and ((current_time - old_time) > 200) and !b1Status) {
     old_time = current_time;
     b1Status = true;
 
-    if (LOW_PRESSURE >= PMIN) {
-      LOW_PRESSURE = 1;
+    if (LOW_PRESSURE >= PMIN+2.0) {
+      LOW_PRESSURE = PMIN;
     }
     else {
       LOW_PRESSURE += 0.1;
@@ -241,8 +241,8 @@ public void checkButtons(unsigned long current_time) {
     old_time2 = current_time;
     b2Status = true;
 
-    if (HIGH_PRESSURE >= PMAX) {
-      HIGH_PRESSURE = 2;
+    if (HIGH_PRESSURE >= PMAX+2.0) {
+      HIGH_PRESSURE = PMAX;
     }
     else {
       HIGH_PRESSURE += 0.1;
@@ -258,27 +258,27 @@ public void checkButtons(unsigned long current_time) {
 /**
  * swith ON RELAY\led 
  */
-public void ON(uint8_t pin) {
+void ON(uint8_t pin) {
   digitalWrite(pin, HIGH);
 }
 
 /**
  * swith ON RELAY\led 
  */
-public void OFF(uint8_t pin) {
+void OFF(uint8_t pin) {
   digitalWrite(pin, LOW);
 }
 
 /**
  * read sensor data
  */
-public float readDATA(uint8_t addr) {
+float readDATA(uint8_t addr) {
   return (float)EEPROM.read(addr) / 10.0;
 }
 
 /**
  * save data to EEPOM
  */
-public void saveDATA(uint8_t addr, uint8_t data) {
+void saveDATA(uint8_t addr, uint8_t data) {
   EEPROM.write(addr, data);
 }
