@@ -6,14 +6,17 @@
 #define b2 5        //right HIGH
 #define ledG 9      //green led - RELAY indicator
 #define ledR 8      //red led - error
-#define ledY 7      //yellow led - PREDICT
 #define RELAY 2     //RELAY!
 #define sensor A0   //SENSOR
 #define dV 0.004    //5/1023 - each 5V via analog signal
-#define PRESSURE_CORRECTION 0.4 //sensor correction
 #define PMIN 2.0    //min for LOW level
 #define PMAX 3.0    //max for HIGH level 
 #define MAX_LCD_WIDTH 16
+#define MIN_SENSOR_VALUE 50
+#define MAX_SENSOR_VALUE 800
+#define EEPROM_OFFSET 10.0
+#define PRESSURE_SHIFT 0.1
+#define LIMIT_BUTTON_SECONDS 100
 
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
@@ -29,8 +32,6 @@ uint8_t addr = 0;
 unsigned long current_time = 0;
 unsigned long old_time = 0;
 unsigned long old_time2 = 0;
-unsigned long test_millis = 0;
-//unsigned long prev_predict = 0; //start working
 
 float LOW_PRESSURE = 2.0;
 float HIGH_PRESSURE = 3.0;
@@ -43,8 +44,8 @@ uint16_t analogV = 0; //analog signal value
  * setup method that allows to init system
  */
 void setup() {
-  //
-  Serial.begin(115200);
+  blink(3);
+//  Serial.begin(115200);
 
   //  try to load variables from EEPPROM arduino
   LOW_PRESSURE = readDATA(0);
@@ -61,11 +62,11 @@ void setup() {
   
   pinMode(ledG, OUTPUT);
   pinMode(ledR, OUTPUT);
-  //pinMode(ledY, OUTPUT);
   pinMode(RELAY, OUTPUT);
+
+  pinMode(LED_BUILTIN, OUTPUT);
   
   analogV = getAnalogData();
-  //Vout = (analogV * dV1) - dP;
   CURRENT_PRESSURE = getPressure(analogV);
 
   lcd.init();
@@ -75,9 +76,15 @@ void setup() {
   drawMenu();
   OFF(ledG);
   OFF(ledR);
-  //digitalWrite(ledY, LOW);
+}
 
-  test_millis = current_time;
+void blink(int8_t count) {
+  for (int8_t i=0; i<count; i++) {
+    digitalWrite(LED_BUILTIN, HIGH);   // turn the LED on (HIGH is the voltage level)
+    delay(300);                       // wait for a second
+    digitalWrite(LED_BUILTIN, LOW);    // turn the LED off by making the voltage LOW
+    delay(300);                       // wait for a second  
+  }
 }
 void loop() {
 
@@ -111,6 +118,13 @@ void drawMenu() {
   if (!SYSTEM_ERROR) {
     uint8_t blocks = (CURRENT_PRESSURE - LOW_PRESSURE) / ((HIGH_PRESSURE - LOW_PRESSURE) / MAX_LCD_WIDTH);
 
+    //set protected blocks counter
+    if (blocks < 0) {
+      blocks = 0;
+    } else if (blocks > 15) {
+      blocks = 15;
+    }
+
     for (uint8_t i = 15; i > blocks; i--) {
       lcd.setCursor(i, 1); //x,y
       lcd.write(254); //total hours working
@@ -134,12 +148,9 @@ void drawMenu() {
  */
 float getPressure(uint16_t analog) {
   Vout = (analog * dV);
-  //updated formula according to:
-  // 0.4 - 0bar
-  // 4.5 = 12bar (1.2Mpa)
-  //−12x+4.1y+4.8=0 
-  //we got the following: y(pressure) = (-48/41)+((120*x)/41) | x = voltage (analog * (5/1023) = 0.004))
-  CURRENT_PRESSURE = (-48/41)+((120*Vout)/41)  + PRESSURE_CORRECTION; 
+  float pressure_pascal = (3.0*(Vout-0.47))*1000000.0;
+  //convert PSI into BAR
+  CURRENT_PRESSURE = pressure_pascal/10e5;
   return CURRENT_PRESSURE;
 }
 
@@ -147,7 +158,7 @@ float getPressure(uint16_t analog) {
  * stop RELAY in case if sensor throws the data less that normal 
  */
 void checkSensorHealth(uint16_t analog) {
-  if ((analog <= 50) or (analog >= 800) and !(SYSTEM_ERROR)) { //800~ its like ~7.5bar
+  if ((analog <= MIN_SENSOR_VALUE) or (analog >= MAX_SENSOR_VALUE) and !(SYSTEM_ERROR)) { //800~ its like ~7.5bar
     ON(ledR);
     OFF(RELAY);
     SYSTEM_ERROR = true;
@@ -177,15 +188,16 @@ void checkPressure() {
     ON(ledG);
     ON(RELAY);
     working = true;
+    ON(LED_BUILTIN);
   }
   else if (CURRENT_PRESSURE >= HIGH_PRESSURE) {
     lcd.clear();
     OFF(ledG);
     OFF(RELAY);
     working = false;
+    OFF(LED_BUILTIN);
   }
 }
-
 
 /**
  * get data from the analog arduino pin 
@@ -219,7 +231,7 @@ uint16_t getAnalogData(void) {
  */
 void checkButtons(unsigned long current_time) {
 
-  if (digitalRead(b1) and ((current_time - old_time) > 200) and !b1Status) {
+  if (digitalRead(b1) and ((current_time - old_time) > LIMIT_BUTTON_SECONDS) and !b1Status) {
     old_time = current_time;
     b1Status = true;
 
@@ -233,25 +245,25 @@ void checkButtons(unsigned long current_time) {
   }
   else if (!digitalRead(b1) and b1Status) {
     b1Status = false;
-    saveDATA(0, LOW_PRESSURE * 10);
+    saveDATA(0, LOW_PRESSURE * EEPROM_OFFSET);
   }
 
   // check the second button
-  if (digitalRead(b2) and ((current_time - old_time2) > 200) and !b2Status) {
+  if (digitalRead(b2) and ((current_time - old_time2) > LIMIT_BUTTON_SECONDS) and !b2Status) {
     old_time2 = current_time;
     b2Status = true;
 
-    if (HIGH_PRESSURE >= PMAX+2.0) {
+    if (HIGH_PRESSURE >= PMAX + 2.0) {
       HIGH_PRESSURE = PMAX;
     }
     else {
-      HIGH_PRESSURE += 0.1;
+      HIGH_PRESSURE += PRESSURE_SHIFT;
     }
     drawMenu();
   }
   else if (!digitalRead(b2) and b2Status) {
     b2Status = false;
-    saveDATA(1, (HIGH_PRESSURE + 0.1) * 10);
+    saveDATA(1, (HIGH_PRESSURE + PRESSURE_SHIFT) * EEPROM_OFFSET);
   }
 }
 
@@ -273,7 +285,7 @@ void OFF(uint8_t pin) {
  * read sensor data
  */
 float readDATA(uint8_t addr) {
-  return (float)EEPROM.read(addr) / 10.0;
+  return (float)EEPROM.read(addr) / EEPROM_OFFSET;
 }
 
 /**
