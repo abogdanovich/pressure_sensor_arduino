@@ -137,11 +137,6 @@ void drawMenu() {
     if (drawBlocks > MAX_LCD_WIDTH) {
       drawBlocks = 0;
     }
-//
-//    for (int i=0; i<MAX_LCD_WIDTH-1; i++) {
-//      lcd.setCursor(i, 1);
-//      lcd.write(254);
-//    }
   
     for (int i=0; i<drawBlocks-1; i++) {
       lcd.setCursor(i, 1);
@@ -300,8 +295,7 @@ void OFF(uint8_t pin) {
  * read sensor data
  */
 float readDATA(uint8_t addr) {
-  return 0.0;
-  //(float)EEPROM.read(addr) / EEPROM_OFFSET;
+  return (float)EEPROM.read(addr) / EEPROM_OFFSET;
 }
 
 /**
