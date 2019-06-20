@@ -11,7 +11,7 @@
 #define dV 0.004    //5/1023 - each 5V via analog signal
 #define PRESSURE_MIN 2.0    //min for LOW level
 #define PRESSURE_MAX 6.0    //max for HIGH level 
-#define MAX_LCD_WIDTH 15
+#define MAX_LCD_WIDTH 16
 #define MIN_SENSOR_VALUE 50
 #define MAX_SENSOR_VALUE 800
 #define EEPROM_OFFSET 10.0
@@ -35,10 +35,19 @@ unsigned long old_time2 = 0;
 
 float LOW_PRESSURE = 2.0;
 float HIGH_PRESSURE = 5.0;
-float CURRENT_PRESSURE = 2.0; //current pressure
-
+float CURRENT_PRESSURE = 0.0; //current pressure
 float Vout = 0.0; //current pressure in voltage
 uint16_t rawValue = 0; //analog signal value
+
+char line0[16];
+char line1[16];
+
+void updateDisplay() {
+  lcd.setCursor(0,0);
+  lcd.print(line0);
+  lcd.setCursor(0,1);
+  lcd.print(line1);
+}
 
 /**
  * setup method that allows to init system
@@ -47,12 +56,15 @@ void setup() {
   blink(3);
 
   //  try to load variables from EEPPROM arduino
-  LOW_PRESSURE = readDATA(0);
-  if (LOW_PRESSURE == 0.0) LOW_PRESSURE = 1.8;
-
-  HIGH_PRESSURE = readDATA(1);
-  if (HIGH_PRESSURE == 0.0) HIGH_PRESSURE = 2.9;
-
+  uint8_t lowPressure = readDATA(0);
+  if (lowPressure > 0.0) {
+    LOW_PRESSURE = lowPressure;
+  } 
+  uint8_t highPressure = readDATA(1);
+  if (highPressure > 0.0) {
+    HIGH_PRESSURE = highPressure;
+  } 
+  
   current_time = millis();
 
   pinMode(b1, INPUT);
@@ -66,7 +78,7 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   
   rawValue = getAnalogData();
-  CURRENT_PRESSURE = getPressure(rawValue);
+  CURRENT_PRESSURE = calcPressure(rawValue);
 
   lcd.init();
   lcd.backlight();//switch display light
@@ -97,7 +109,7 @@ void loop() {
   //checking and geting other functions
   if (!SYSTEM_ERROR) {
     checkPressure();
-    getPressure(rawValue);
+    calcPressure(rawValue);
   }
   drawMenu();
   checkButtons(current_time);
@@ -107,7 +119,8 @@ void loop() {
  * update menu items
  */
 void drawMenu() {
-
+  updateDisplay();
+  
   lcd.setCursor(0, 0); //x,y
   lcd.print(LOW_PRESSURE);
   lcd.setCursor(6, 0); //x,y
@@ -120,12 +133,16 @@ void drawMenu() {
     uint8_t currentPercent = ((CURRENT_PRESSURE - LOW_PRESSURE) * 100) / (HIGH_PRESSURE - LOW_PRESSURE); 
     uint8_t blockInPercent = 100 / MAX_LCD_WIDTH;
     uint8_t drawBlocks = currentPercent / blockInPercent;
-
-    for (int i=0; i<=MAX_LCD_WIDTH; i++) {
-      lcd.setCursor(i, 1);
-      lcd.write(254);
-    }
     
+    if (drawBlocks > MAX_LCD_WIDTH) {
+      drawBlocks = 0;
+    }
+//
+//    for (int i=0; i<MAX_LCD_WIDTH-1; i++) {
+//      lcd.setCursor(i, 1);
+//      lcd.write(254);
+//    }
+  
     for (int i=0; i<drawBlocks-1; i++) {
       lcd.setCursor(i, 1);
       lcd.write(255);
@@ -141,20 +158,13 @@ void drawMenu() {
 /**
  * calc pressure from converted analog signal
  */
-float getPressure(uint16_t analog) {
-  //Vout = (analog * dV);
-  Vout += 0.1;
-  if (Vout >= 4.5) {
-    Vout = 0.0;
-  }
+float calcPressure(uint16_t rawPressureValue) {
+  Vout = (rawPressureValue * dV);
   float pressure_pascal = (3.0*(Vout-0.47))*1000000.0;
   //convert PSI into BAR
   CURRENT_PRESSURE = pressure_pascal/10e5;
   if (CURRENT_PRESSURE < 0) {
     CURRENT_PRESSURE = 0;
-  }
-  if (CURRENT_PRESSURE >= HIGH_PRESSURE) {
-    Vout = 0;
   }
   return CURRENT_PRESSURE;
 }
