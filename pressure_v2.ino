@@ -13,9 +13,16 @@
 #define MAX_LCD_WIDTH 16
 #define MIN_SENSOR_VALUE 50
 #define MAX_SENSOR_VALUE 800
-#define EEPROM_OFFSET 10.0
+#define CONVERT_TO_FLOAT_VIEW 10.0
 #define PRESSURE_OFFSET 0.1
 #define LIMIT_BUTTON_SECONDS 100
+#define MILLIS_1H_THRESHOLD 60*60*1000 //each 1 hours save
+#define HOURS_IN_DAY 24
+
+#define EEPROM_WORKING_LOW_PRESSURE_DATA 0
+#define EEPROM_WORKING_HIGH_PRESSURE_DATA 1
+#define EEPROM_WORKING_HOURS_DATA 2
+#define EEPROM_WORKING_DAYS_DATA 3
 
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
@@ -28,15 +35,26 @@ bool b2Status = false;
 bool isWorking = false;
 bool systemError = false;
 uint8_t addr = 0;
-unsigned long current_time = 0;
-unsigned long timerSeconds1 = 0;
-unsigned long timerSeconds2 = 0;
+unsigned long currentSeconds = 0;
+unsigned long timerStart1 = 0;
+unsigned long timerStart2 = 0;
+unsigned long timerStart3 = 0;
+unsigned long timerWorkingStartStop = 0;
+
+//EEPPROM addr:2 - working hours
+unsigned long totalWorkingHours = 0; //display and save/load in days 0-255 1 bit
+unsigned long totalWorkingMillis = 0; //display and save/load in days 0-255 1 bit
+//EEPPROM addr:3 - working days
+byte totalWorkingDays = 0; //display and save/load in days 0-255 1 bit
 
 float lowPressure = 2.0;
-float highPressure = 5.0;
+float highPressure = 4.0;
 float currentPressureValue = 0.0; //current pressure
 float pressureInVoltage = 0.0;    //current pressure in voltage
 uint16_t rawSensorValue = 0;      //analog signal value
+
+//testing only
+bool testing = false;
 
 //[] char for lcd
 char emptySymbol[] {
@@ -55,17 +73,25 @@ char emptySymbol[] {
  */
 void setup() {
   //  try to load variables from EEPPROM arduino
-  uint8_t lowPressure = readDATA(0);
+  uint8_t lowPressure = readEEPROMPressureData(EEPROM_WORKING_LOW_PRESSURE_DATA) / CONVERT_TO_FLOAT_VIEW;
   if (lowPressure > MIN_PRESSURE_THRESHOLD) {
     lowPressure = lowPressure;
   } 
-  uint8_t highPressure = readDATA(1);
+  uint8_t highPressure = readEEPROMPressureData(EEPROM_WORKING_HIGH_PRESSURE_DATA)  / CONVERT_TO_FLOAT_VIEW;
   if (highPressure > 0.0 && highPressure < MAX_PRESSURE_THRESHOLD) {
     highPressure = highPressure;
   } 
-  
-  current_time = millis();
 
+  uint8_t totalWorkingHours_temp = readEEPROMPressureData(EEPROM_WORKING_HOURS_DATA);  
+  if (totalWorkingHours_temp > 0) {
+    totalWorkingHours = totalWorkingHours_temp;
+  }
+  
+  uint8_t totalWorkingDays_temp = readEEPROMPressureData(EEPROM_WORKING_DAYS_DATA);  
+  if (totalWorkingDays_temp > 0) {
+    totalWorkingDays = totalWorkingDays_temp;
+  }
+  
   pinMode(b1, INPUT);
   pinMode(b2, INPUT);
   pinMode(sensor, INPUT);
@@ -74,10 +100,9 @@ void setup() {
   pinMode(ledR, OUTPUT);
   pinMode(RELAY, OUTPUT);
 
-  pinMode(LED_BUILTIN, OUTPUT);
-  
   rawSensorValue = getAnalogData();
-  currentPressureValue = calcPressure(rawSensorValue);
+  //currentPressureValue = calcPressure(rawSensorValue);
+  currentPressureValue = 2;
   lcd.init();
   lcd.backlight();//switch display light
   lcd.clear();
@@ -89,28 +114,68 @@ void setup() {
 }
 
 void loop() {
-
-  current_time = millis();
-
+  currentSeconds = millis();
   //regular get sensor data
-  rawSensorValue = getAnalogData();
-  
-  checkSensorHealth(rawSensorValue);
+//  rawSensorValue = getAnalogData();
+//  checkSensorHealth(rawSensorValue);
  
   //checking and geting other functions
   if (!systemError) {
     checkPressure();
-    calcPressure(rawSensorValue);
+//    calcPressure(rawSensorValue);
   }
   drawMenu();
-  checkButtons(current_time);
+  checkButtons(currentSeconds);
+  calcTotalWork(currentSeconds);
+  delay(1);
+
+  uint8_t rnd = random(1, 15);
+  
+  if (rnd == 5) {
+    //switch
+    testing = true;
+  }
+
+  if (testing) {
+    currentPressureValue += 0.2;
+    if (currentPressureValue >= highPressure) {
+      testing = false;
+    }
+  }
+  
+  delay(500);
+  
 }
 
+
+
 /**
- * update menu items
+ * Calculate total working hours\days and save the data into EEPROM
+ * EEPROM (100,000/24/365) write/erase cycles ~ 11 years for writing each hour
+ */
+ void calcTotalWork(unsigned long currentSeconds) {
+  
+  if ((currentSeconds - timerStart3) > MILLIS_1H_THRESHOLD) {
+    if (!isWorking) {
+      //save data to EEPPROM when we do not work
+      if (totalWorkingHours >= HOURS_IN_DAY) {
+        totalWorkingDays++;
+        totalWorkingHours -= HOURS_IN_DAY;
+        saveEEPROMPressureData(EEPROM_WORKING_HOURS_DATA, totalWorkingHours);  
+        saveEEPROMPressureData(EEPROM_WORKING_DAYS_DATA, totalWorkingDays);  
+      } else {
+        saveEEPROMPressureData(EEPROM_WORKING_HOURS_DATA, totalWorkingHours);    
+      }
+    }
+  }
+ }
+
+/**
+ * Update LCD menu items 16*2
  */
 void drawMenu() {
-
+  
+  if (!systemError) {
   lcd.setCursor(0, 0); //x,y
   lcd.print("H:");
   lcd.setCursor(2, 0); //x,y
@@ -126,12 +191,24 @@ void drawMenu() {
   lcd.setCursor(5, 1); //x,y
   lcd.print("|");
 
-  lcd.setCursor(6, 0); //x,y
+  lcd.setCursor(7, 0); //x,y
   lcd.print(currentPressureValue);
-  lcd.setCursor(6, 0); //x,y
-  
+  lcd.setCursor(12, 0); //x,y
+  lcd.print("bar");
 
-  if (!systemError) {
+  lcd.setCursor(7, 1); //x,y
+  //total hours \ days totalWorkingMillis | totalWorkingHours | totalWorkingDays
+  lcd.print(totalWorkingMillis/1000);
+  lcd.setCursor(12, 1); //x,y
+  lcd.print("sec");
+
+  if (isWorking) {
+    lcd.setCursor(0, 3); //x,y
+    lcd.write(255);
+  } else {
+    lcd.setCursor(0, 3); //x,y
+    lcd.write(254);
+  }
     //current pressure in percents 
 //    uint8_t currentPercent = ((currentPressureValue - lowPressure) * 100) / (highPressure - lowPressure); 
 //    uint8_t blockInPercent = 100 / MAX_LCD_WIDTH;
@@ -199,6 +276,14 @@ void alarmErorr(void) {
   }
 }
 
+void countPumpWorkingTime() {
+    totalWorkingMillis += (millis() - timerWorkingStartStop);
+    if ((totalWorkingMillis / MILLIS_1H_THRESHOLD) >= 1) {
+      totalWorkingHours++; //inc working hours
+      totalWorkingMillis -= MILLIS_1H_THRESHOLD;
+    }
+}
+
 /**
  * check and control main RELAY
  */
@@ -207,6 +292,11 @@ void checkPressure() {
     ON(ledG);
     ON(RELAY);
     isWorking = true;
+    
+    //start counting working millis
+    timerWorkingStartStop = millis();
+    //
+    
     ON(LED_BUILTIN);
   }
   else if (currentPressureValue >= highPressure) {
@@ -214,6 +304,10 @@ void checkPressure() {
     OFF(ledG);
     OFF(RELAY);
     isWorking = false;
+    
+    //count working millis
+    countPumpWorkingTime();
+    
     OFF(LED_BUILTIN);
   }
 }
@@ -248,10 +342,10 @@ uint16_t getAnalogData() {
 /**
  * check buttons state for MIN_PRESSURE_THRESHOLD and MAX_PRESSURE_THRESHOLD corection
  */
-void checkButtons(unsigned long current_time) {
+void checkButtons(unsigned long currentSeconds) {
 
-  if (digitalRead(b1) and ((current_time - timerSeconds1) > LIMIT_BUTTON_SECONDS) and !b1Status) {
-    timerSeconds1 = current_time;
+  if (digitalRead(b1) and ((currentSeconds - timerStart1) > LIMIT_BUTTON_SECONDS) and !b1Status) {
+    timerStart1 = currentSeconds;
     b1Status = true;
 
     if (lowPressure >= MIN_PRESSURE_THRESHOLD) {
@@ -264,12 +358,12 @@ void checkButtons(unsigned long current_time) {
   }
   else if (!digitalRead(b1) and b1Status) {
     b1Status = false;
-    saveDATA(0, lowPressure * EEPROM_OFFSET);
+    saveEEPROMPressureData(EEPROM_WORKING_LOW_PRESSURE_DATA, lowPressure * CONVERT_TO_FLOAT_VIEW);
   }
 
   // check the second button
-  if (digitalRead(b2) and ((current_time - timerSeconds2) > LIMIT_BUTTON_SECONDS) and !b2Status) {
-    timerSeconds2 = current_time;
+  if (digitalRead(b2) and ((currentSeconds - timerStart2) > LIMIT_BUTTON_SECONDS) and !b2Status) {
+    timerStart2 = currentSeconds;
     b2Status = true;
 
     if (highPressure >= MAX_PRESSURE_THRESHOLD + 2.0) {
@@ -282,7 +376,7 @@ void checkButtons(unsigned long current_time) {
   }
   else if (!digitalRead(b2) and b2Status) {
     b2Status = false;
-    saveDATA(1, (highPressure + PRESSURE_OFFSET) * EEPROM_OFFSET);
+    saveEEPROMPressureData(EEPROM_WORKING_HIGH_PRESSURE_DATA, (highPressure + PRESSURE_OFFSET) * CONVERT_TO_FLOAT_VIEW);
   }
 }
 
@@ -303,13 +397,13 @@ void OFF(uint8_t pin) {
 /**
  * read sensor data
  */
-float readDATA(uint8_t addr) {
-  return (float)EEPROM.read(addr) / EEPROM_OFFSET;
+float readEEPROMPressureData(uint8_t addr) {
+  return (float)EEPROM.read(addr);
 }
 
 /**
  * save data to EEPOM
  */
-void saveDATA(uint8_t addr, uint8_t data) {
+void saveEEPROMPressureData(uint8_t addr, uint8_t data) {
   EEPROM.write(addr, data);
 }
