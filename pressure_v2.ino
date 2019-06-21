@@ -11,6 +11,7 @@
 #define MIN_PRESSURE_THRESHOLD 2.0    //min for LOW level
 #define MAX_PRESSURE_THRESHOLD 6.0    //max for HIGH level 
 #define MAX_LCD_WIDTH 16
+#define MAX_LCD_HEIGHT 2
 #define MIN_SENSOR_VALUE 50
 #define MAX_SENSOR_VALUE 800
 #define CONVERT_TO_FLOAT_VIEW 10.0
@@ -28,7 +29,7 @@
 #include <LiquidCrystal_I2C.h>
 #include <EEPROM.h>
 
-LiquidCrystal_I2C lcd(0x27, 16, 2); 
+LiquidCrystal_I2C lcd(0x27, MAX_LCD_WIDTH, MAX_LCD_HEIGHT); 
 
 bool b1Status = false;
 bool b2Status = false;
@@ -52,21 +53,6 @@ float highPressure = 4.0;
 float currentPressureValue = 0.0; //current pressure
 float pressureInVoltage = 0.0;    //current pressure in voltage
 uint16_t rawSensorValue = 0;      //analog signal value
-
-//testing only
-bool testing = false;
-
-//[] char for lcd
-char emptySymbol[] {
-  B11111,
-  B10001,
-  B10001,
-  B10001,
-  B10001,
-  B10001,
-  B10001,
-  B11111  
-};
 
 /**
  * setup method that allows to init system
@@ -101,14 +87,13 @@ void setup() {
   pinMode(RELAY, OUTPUT);
 
   rawSensorValue = getAnalogData();
-  //currentPressureValue = calcPressure(rawSensorValue);
-  currentPressureValue = 2;
+  currentPressureValue = calcPressure(rawSensorValue);
   lcd.init();
   lcd.backlight();//switch display light
   lcd.clear();
-  lcd.createChar(0, emptySymbol);
   
   drawMenu();
+
   OFF(ledG);
   OFF(ledR);
 }
@@ -116,44 +101,25 @@ void setup() {
 void loop() {
   currentSeconds = millis();
   //regular get sensor data
-//  rawSensorValue = getAnalogData();
-//  checkSensorHealth(rawSensorValue);
+  rawSensorValue = getAnalogData();
+  checkSensorHealth(rawSensorValue);
  
   //checking and geting other functions
   if (!systemError) {
     checkPressure();
-//    calcPressure(rawSensorValue);
+    calcPressure(rawSensorValue);
   }
   drawMenu();
   checkButtons(currentSeconds);
-  calcTotalWork(currentSeconds);
+  calcAndSaveTotalWork(currentSeconds);
   delay(1);
-
-  uint8_t rnd = random(1, 15);
-  
-  if (rnd == 5) {
-    //switch
-    testing = true;
-  }
-
-  if (testing) {
-    currentPressureValue += 0.2;
-    if (currentPressureValue >= highPressure) {
-      testing = false;
-    }
-  }
-  
-  delay(500);
-  
 }
-
-
 
 /**
  * Calculate total working hours\days and save the data into EEPROM
  * EEPROM (100,000/24/365) write/erase cycles ~ 11 years for writing each hour
  */
- void calcTotalWork(unsigned long currentSeconds) {
+ void calcAndSaveTotalWork(unsigned long currentSeconds) {
   
   if ((currentSeconds - timerStart3) > MILLIS_1H_THRESHOLD) {
     if (!isWorking) {
@@ -176,62 +142,48 @@ void loop() {
 void drawMenu() {
   
   if (!systemError) {
-  lcd.setCursor(0, 0); //x,y
-  lcd.print("H:");
-  lcd.setCursor(2, 0); //x,y
-  lcd.print(highPressure);
-
-  lcd.setCursor(0, 1); //x,y
-  lcd.print("L:");
-  lcd.setCursor(2, 1); //x,y
-  lcd.print(lowPressure);
-
-  lcd.setCursor(5, 0); //x,y
-  lcd.print("|");
-  lcd.setCursor(5, 1); //x,y
-  lcd.print("|");
-
-  lcd.setCursor(7, 0); //x,y
-  lcd.print(currentPressureValue);
-  lcd.setCursor(12, 0); //x,y
-  lcd.print("bar");
-
-  lcd.setCursor(7, 1); //x,y
-  //total hours \ days totalWorkingMillis | totalWorkingHours | totalWorkingDays
-  lcd.print(totalWorkingMillis/1000);
-  lcd.setCursor(12, 1); //x,y
-  lcd.print("sec");
-
-  if (isWorking) {
-    lcd.setCursor(0, 3); //x,y
-    lcd.write(255);
-  } else {
-    lcd.setCursor(0, 3); //x,y
-    lcd.write(254);
-  }
-    //current pressure in percents 
-//    uint8_t currentPercent = ((currentPressureValue - lowPressure) * 100) / (highPressure - lowPressure); 
-//    uint8_t blockInPercent = 100 / MAX_LCD_WIDTH;
-//    uint8_t drawBlocks = currentPercent / blockInPercent;
-//    
-//    if (drawBlocks > MAX_LCD_WIDTH) {
-//      drawBlocks = 0;
-//    }
-//
-//    for (int i=0; i<MAX_LCD_WIDTH-1; i++) {
-//      lcd.setCursor(i, 1);
-//      lcd.write(emptySymbol);
-//      
-//    }
-//  
-//    for (int i=0; i<drawBlocks-1; i++) {
-//      lcd.setCursor(i, 1);
-//      lcd.write(255);
-//    }
-  }
-
+    lcd.setCursor(0, 0); 
+    lcd.print("H:");
+    lcd.setCursor(2, 0); 
+    lcd.print(highPressure);
+  
+    lcd.setCursor(0, 1); 
+    lcd.print("L:");
+    lcd.setCursor(2, 1); 
+    lcd.print(lowPressure);
+  
+    lcd.setCursor(5, 0); 
+    lcd.print("|");
+    lcd.setCursor(5, 1); 
+    lcd.print("|");
+  
+    lcd.setCursor(7, 0); 
+    lcd.print(currentPressureValue);
+    lcd.setCursor(12, 0); 
+    lcd.print("bar");
+  
+     
+    //total hours \ days totalWorkingMillis | totalWorkingHours | totalWorkingDays
+    if (totalWorkingHours > 1) {
+      lcd.setCursor(7, 1);
+      lcd.print(totalWorkingHours);
+      lcd.setCursor(12, 1); 
+      lcd.print("h");
+    } else if (totalWorkingMillis > 1000*60) {
+      lcd.setCursor(7, 1);
+      lcd.print(totalWorkingMillis/1000/60);
+      lcd.setCursor(12, 1); 
+      lcd.print("m");
+    } else {
+      lcd.setCursor(7, 1);
+      lcd.print(totalWorkingMillis/1000);
+      lcd.setCursor(12, 1); 
+      lcd.print("s");
+    }
+    
+  }   
   else {
-    lcd.setCursor(0, 1); //x,y
+    lcd.setCursor(0, 1); 
     lcd.print("low sensor data!");
   }
 }
@@ -254,7 +206,7 @@ float calcPressure(uint16_t rawPressureValue) {
  * stop RELAY in case if sensor throws the data less that normal 
  */
 void checkSensorHealth(uint16_t analog) {
-  if ((analog <= MIN_SENSOR_VALUE) or (analog >= MAX_SENSOR_VALUE) and !(systemError)) { //800~ its like ~7.5bar
+  if (analog <= MIN_SENSOR_VALUE or analog >= MAX_SENSOR_VALUE && !(systemError)) { //800~ its like ~7.5bar
     ON(ledR);
     OFF(RELAY);
     systemError = true;
@@ -288,26 +240,22 @@ void countPumpWorkingTime() {
  * check and control main RELAY
  */
 void checkPressure() {
-  if (currentPressureValue <= lowPressure) {
+  if (currentPressureValue <= lowPressure && isWorking == false) {
     ON(ledG);
     ON(RELAY);
     isWorking = true;
-    
     //start counting working millis
     timerWorkingStartStop = millis();
     //
-    
     ON(LED_BUILTIN);
   }
-  else if (currentPressureValue >= highPressure) {
+  else if (currentPressureValue >= highPressure && isWorking == true) {
     lcd.clear();
     OFF(ledG);
     OFF(RELAY);
     isWorking = false;
-    
     //count working millis
     countPumpWorkingTime();
-    
     OFF(LED_BUILTIN);
   }
 }
@@ -344,7 +292,7 @@ uint16_t getAnalogData() {
  */
 void checkButtons(unsigned long currentSeconds) {
 
-  if (digitalRead(b1) and ((currentSeconds - timerStart1) > LIMIT_BUTTON_SECONDS) and !b1Status) {
+  if (digitalRead(b1) && ((currentSeconds - timerStart1) > LIMIT_BUTTON_SECONDS) && b1Status == false) {
     timerStart1 = currentSeconds;
     b1Status = true;
 
@@ -356,13 +304,13 @@ void checkButtons(unsigned long currentSeconds) {
     }
     drawMenu();
   }
-  else if (!digitalRead(b1) and b1Status) {
+  else if (!digitalRead(b1) && b1Status == true) {
     b1Status = false;
     saveEEPROMPressureData(EEPROM_WORKING_LOW_PRESSURE_DATA, lowPressure * CONVERT_TO_FLOAT_VIEW);
   }
 
   // check the second button
-  if (digitalRead(b2) and ((currentSeconds - timerStart2) > LIMIT_BUTTON_SECONDS) and !b2Status) {
+  if (digitalRead(b2) && ((currentSeconds - timerStart2) > LIMIT_BUTTON_SECONDS) && b2Status == false) {
     timerStart2 = currentSeconds;
     b2Status = true;
 
@@ -374,7 +322,7 @@ void checkButtons(unsigned long currentSeconds) {
     }
     drawMenu();
   }
-  else if (!digitalRead(b2) and b2Status) {
+  else if (!digitalRead(b2) && b2Status == true) {
     b2Status = false;
     saveEEPROMPressureData(EEPROM_WORKING_HIGH_PRESSURE_DATA, (highPressure + PRESSURE_OFFSET) * CONVERT_TO_FLOAT_VIEW);
   }
