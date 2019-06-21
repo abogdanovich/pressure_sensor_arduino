@@ -110,34 +110,47 @@ void loop() {
  * update menu items
  */
 void drawMenu() {
-  
+
   lcd.setCursor(0, 0); //x,y
+  lcd.print("H:");
+  lcd.setCursor(2, 0); //x,y
+  lcd.print(highPressure);
+
+  lcd.setCursor(0, 1); //x,y
+  lcd.print("L:");
+  lcd.setCursor(2, 1); //x,y
   lcd.print(lowPressure);
+
+  lcd.setCursor(5, 0); //x,y
+  lcd.print("|");
+  lcd.setCursor(5, 1); //x,y
+  lcd.print("|");
+
   lcd.setCursor(6, 0); //x,y
   lcd.print(currentPressureValue);
-  lcd.setCursor(12, 0); //x,y
-  lcd.print(highPressure);
+  lcd.setCursor(6, 0); //x,y
+  
 
   if (!systemError) {
     //current pressure in percents 
-    uint8_t currentPercent = ((currentPressureValue - lowPressure) * 100) / (highPressure - lowPressure); 
-    uint8_t blockInPercent = 100 / MAX_LCD_WIDTH;
-    uint8_t drawBlocks = currentPercent / blockInPercent;
-    
-    if (drawBlocks > MAX_LCD_WIDTH) {
-      drawBlocks = 0;
-    }
-
-    for (int i=0; i<MAX_LCD_WIDTH-1; i++) {
-      lcd.setCursor(i, 1);
-      lcd.write(emptySymbol);
-      
-    }
-  
-    for (int i=0; i<drawBlocks-1; i++) {
-      lcd.setCursor(i, 1);
-      lcd.write(255);
-    }
+//    uint8_t currentPercent = ((currentPressureValue - lowPressure) * 100) / (highPressure - lowPressure); 
+//    uint8_t blockInPercent = 100 / MAX_LCD_WIDTH;
+//    uint8_t drawBlocks = currentPercent / blockInPercent;
+//    
+//    if (drawBlocks > MAX_LCD_WIDTH) {
+//      drawBlocks = 0;
+//    }
+//
+//    for (int i=0; i<MAX_LCD_WIDTH-1; i++) {
+//      lcd.setCursor(i, 1);
+//      lcd.write(emptySymbol);
+//      
+//    }
+//  
+//    for (int i=0; i<drawBlocks-1; i++) {
+//      lcd.setCursor(i, 1);
+//      lcd.write(255);
+//    }
   }
 
   else {
