@@ -30,28 +30,28 @@ unsigned long currentSeconds = 0;
 unsigned long timerStart3 = 0;
 unsigned long timerWorkingStartStop = 0;
 
-//EEPPROM addr:2 - working hours
-unsigned long totalWorkingHours = 0; //display and save/load in days 0-255 1 bit
+byte totalWorkingHours = 0; //display and save/load in days 0-255 1 bit
 unsigned long totalWorkingMillis = 0; //display and save/load in days 0-255 1 bit
-//EEPPROM addr:3 - working days
 byte totalWorkingDays = 0; //display and save/load in days 0-255 1 bit
 
 float lowPressure = 2.3;
 float highPressure = 3.5;
-float currentPressureValue = 0.0; //current pressure
-float pressureInVoltage = 0.0;    //current pressure in voltage
+
 uint16_t rawSensorValue = 0;      //analog signal value
+float currentPressureValue = 0.0; //current pressure
+float pressureInVoltage = 0.0;
+float pressure_pascal = 0.0;
 
 /**
  * setup method that allows to init system
  */
 void setup() {
-  uint8_t totalWorkingHours_temp = readEEPROMPressureData(EEPROM_WORKING_HOURS_DATA);  
+  byte totalWorkingHours_temp = readEEPROMPressureData(EEPROM_WORKING_HOURS_DATA);  
   if (totalWorkingHours_temp > 0) {
     totalWorkingHours = totalWorkingHours_temp;
   }
   
-  uint8_t totalWorkingDays_temp = readEEPROMPressureData(EEPROM_WORKING_DAYS_DATA);  
+  byte totalWorkingDays_temp = readEEPROMPressureData(EEPROM_WORKING_DAYS_DATA);  
   if (totalWorkingDays_temp > 0) {
     totalWorkingDays = totalWorkingDays_temp;
   }
@@ -62,7 +62,7 @@ void setup() {
   pinMode(RELAY, OUTPUT);
 
   rawSensorValue = getAnalogData();
-  currentPressureValue = calcPressure(rawSensorValue);
+  calcPressure(rawSensorValue);
   lcd.init();
   lcd.backlight();//switch display light
   lcd.clear();
@@ -94,7 +94,6 @@ void loop() {
  * EEPROM (100,000/24/365) write/erase cycles ~ 11 years for writing each hour
  */
  void calcAndSaveTotalWork(unsigned long currentSeconds) {
-  
   if ((currentSeconds - timerStart3) > MILLIS_1H_THRESHOLD) {
     if (!isWorking) {
       //save data to EEPPROM when we do not work
@@ -165,15 +164,14 @@ void drawMenu() {
 /**
  * calc pressure from converted analog signal
  */
-float calcPressure(uint16_t rawPressureValue) {
+void calcPressure(uint16_t rawPressureValue) {
   pressureInVoltage = (rawPressureValue * (5/1023));
-  float pressure_pascal = (3.0*(pressureInVoltage-0.47))*1000000.0;
+  pressure_pascal = (3.0*(pressureInVoltage-0.47))*1000000.0;
   //convert PSI into BAR
   currentPressureValue = pressure_pascal/10e5;
   if (currentPressureValue < 0) {
     currentPressureValue = 0;
-  }
-  return currentPressureValue;
+  };
 }
 
 /**
@@ -242,15 +240,17 @@ uint16_t getAnalogData() {
   const uint8_t SIZE_BUF_ADC = 5;
   uint16_t buf_adc[SIZE_BUF_ADC];
   uint16_t t;
+  byte i;
+  byte j;
 
-  for (uint8_t i = 0; i < SIZE_BUF_ADC; i++) {
+  for (i = 0; i < SIZE_BUF_ADC; i++) {
     buf_adc[i] = analogRead(sensor);
     delay(50);
   }
 
   //take mediana from buffer
-  for (uint8_t i = 0; i < SIZE_BUF_ADC; i++) {
-    for (uint8_t j = 0; j < SIZE_BUF_ADC - i - 1; j++) {
+  for (i = 0; i < SIZE_BUF_ADC; i++) {
+    for (j = 0; j < SIZE_BUF_ADC - i - 1; j++) {
       if (buf_adc[j] > buf_adc[j + 1]) {
         t = buf_adc[j];
         buf_adc[j] = buf_adc[j + 1];
