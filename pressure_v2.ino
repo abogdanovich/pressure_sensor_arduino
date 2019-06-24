@@ -2,8 +2,6 @@
  * digital pressure 
  * @author Alex Bogdanovich
   */
-#define b1 6                //left LOW
-#define b2 5                //right HIGH
 #define ledG 9              //green led - RELAY indicator
 #define ledR 8              //red led - error
 #define RELAY 2             //RELAY!
@@ -14,14 +12,8 @@
 #define MAX_LCD_HEIGHT 2
 #define MIN_SENSOR_VALUE 50
 #define MAX_SENSOR_VALUE 800
-#define CONVERT_TO_FLOAT_VIEW 10.0
-#define PRESSURE_OFFSET 0.1
-#define LIMIT_BUTTON_SECONDS 100
 #define MILLIS_1H_THRESHOLD 60*60*1000 //each 1 hours save
 #define HOURS_IN_DAY 24
-
-#define EEPROM_WORKING_LOW_PRESSURE_DATA 0
-#define EEPROM_WORKING_HIGH_PRESSURE_DATA 1
 #define EEPROM_WORKING_HOURS_DATA 2
 #define EEPROM_WORKING_DAYS_DATA 3
 
@@ -31,14 +23,10 @@
 
 LiquidCrystal_I2C lcd(0x27, MAX_LCD_WIDTH, MAX_LCD_HEIGHT); 
 
-bool b1Status = false;
-bool b2Status = false;
 bool isWorking = false;
 bool systemError = false;
 uint8_t addr = 0;
 unsigned long currentSeconds = 0;
-unsigned long timerStart1 = 0;
-unsigned long timerStart2 = 0;
 unsigned long timerStart3 = 0;
 unsigned long timerWorkingStartStop = 0;
 
@@ -48,8 +36,8 @@ unsigned long totalWorkingMillis = 0; //display and save/load in days 0-255 1 bi
 //EEPPROM addr:3 - working days
 byte totalWorkingDays = 0; //display and save/load in days 0-255 1 bit
 
-float lowPressure = 2.0;
-float highPressure = 4.0;
+float lowPressure = 2.3;
+float highPressure = 3.5;
 float currentPressureValue = 0.0; //current pressure
 float pressureInVoltage = 0.0;    //current pressure in voltage
 uint16_t rawSensorValue = 0;      //analog signal value
@@ -58,16 +46,6 @@ uint16_t rawSensorValue = 0;      //analog signal value
  * setup method that allows to init system
  */
 void setup() {
-  //  try to load variables from EEPPROM arduino
-  uint8_t lowPressure = readEEPROMPressureData(EEPROM_WORKING_LOW_PRESSURE_DATA) / CONVERT_TO_FLOAT_VIEW;
-  if (lowPressure > MIN_PRESSURE_THRESHOLD) {
-    lowPressure = lowPressure;
-  } 
-  uint8_t highPressure = readEEPROMPressureData(EEPROM_WORKING_HIGH_PRESSURE_DATA)  / CONVERT_TO_FLOAT_VIEW;
-  if (highPressure > 0.0 && highPressure < MAX_PRESSURE_THRESHOLD) {
-    highPressure = highPressure;
-  } 
-
   uint8_t totalWorkingHours_temp = readEEPROMPressureData(EEPROM_WORKING_HOURS_DATA);  
   if (totalWorkingHours_temp > 0) {
     totalWorkingHours = totalWorkingHours_temp;
@@ -78,10 +56,7 @@ void setup() {
     totalWorkingDays = totalWorkingDays_temp;
   }
   
-  pinMode(b1, INPUT);
-  pinMode(b2, INPUT);
   pinMode(sensor, INPUT);
-  
   pinMode(ledG, OUTPUT);
   pinMode(ledR, OUTPUT);
   pinMode(RELAY, OUTPUT);
@@ -110,7 +85,6 @@ void loop() {
     calcPressure(rawSensorValue);
   }
   drawMenu();
-  checkButtons(currentSeconds);
   calcAndSaveTotalWork(currentSeconds);
   delay(1);
 }
@@ -217,7 +191,7 @@ void checkSensorHealth(uint16_t analog) {
 }
 
 //    alarm error
-void alarmErorr(void) {
+void alarmErorr() {
   if (systemError) {
     ON(ledR);
     if (isWorking) {
@@ -285,47 +259,6 @@ uint16_t getAnalogData() {
     }
   }
   return buf_adc[(SIZE_BUF_ADC - 1) / 2];
-}
-
-/**
- * check buttons state for MIN_PRESSURE_THRESHOLD and MAX_PRESSURE_THRESHOLD corection
- */
-void checkButtons(unsigned long currentSeconds) {
-
-  if (digitalRead(b1) && ((currentSeconds - timerStart1) > LIMIT_BUTTON_SECONDS) && b1Status == false) {
-    timerStart1 = currentSeconds;
-    b1Status = true;
-
-    if (lowPressure >= MIN_PRESSURE_THRESHOLD) {
-      lowPressure = MIN_PRESSURE_THRESHOLD;
-    }
-    else {
-      lowPressure += PRESSURE_OFFSET;
-    }
-    drawMenu();
-  }
-  else if (!digitalRead(b1) && b1Status == true) {
-    b1Status = false;
-    saveEEPROMPressureData(EEPROM_WORKING_LOW_PRESSURE_DATA, lowPressure * CONVERT_TO_FLOAT_VIEW);
-  }
-
-  // check the second button
-  if (digitalRead(b2) && ((currentSeconds - timerStart2) > LIMIT_BUTTON_SECONDS) && b2Status == false) {
-    timerStart2 = currentSeconds;
-    b2Status = true;
-
-    if (highPressure >= MAX_PRESSURE_THRESHOLD + 2.0) {
-      highPressure = MAX_PRESSURE_THRESHOLD;
-    }
-    else {
-      highPressure += PRESSURE_OFFSET;
-    }
-    drawMenu();
-  }
-  else if (!digitalRead(b2) && b2Status == true) {
-    b2Status = false;
-    saveEEPROMPressureData(EEPROM_WORKING_HIGH_PRESSURE_DATA, (highPressure + PRESSURE_OFFSET) * CONVERT_TO_FLOAT_VIEW);
-  }
 }
 
 /**
