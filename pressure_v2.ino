@@ -6,8 +6,6 @@
 #define ledR 8              //red led - error
 #define RELAY 2             //RELAY!
 #define sensor A0           //SENSOR
-#define MIN_PRESSURE_THRESHOLD 2.0    //min for LOW level
-#define MAX_PRESSURE_THRESHOLD 6.0    //max for HIGH level 
 #define MAX_LCD_WIDTH 16
 #define MAX_LCD_HEIGHT 2
 #define MIN_SENSOR_VALUE 50
@@ -40,18 +38,21 @@ float highPressure = 3.5;
 uint16_t rawSensorValue = 0;      //analog signal value
 float currentPressureValue = 0.0; //current pressure
 float pressureInVoltage = 0.0;
-float pressure_pascal = 0.0;
+float pressurePascal = 0.0;
 
 /**
  * setup method that allows to init system
  */
 void setup() {
+  Serial.begin(115200);
   byte totalWorkingHours_temp = readEEPROMPressureData(EEPROM_WORKING_HOURS_DATA);  
+  Serial.println("totalWorkingHours_temp "+totalWorkingHours_temp);
   if (totalWorkingHours_temp > 0) {
     totalWorkingHours = totalWorkingHours_temp;
   }
   
   byte totalWorkingDays_temp = readEEPROMPressureData(EEPROM_WORKING_DAYS_DATA);  
+  Serial.println("totalWorkingDays_temp "+totalWorkingDays_temp);
   if (totalWorkingDays_temp > 0) {
     totalWorkingDays = totalWorkingDays_temp;
   }
@@ -77,6 +78,7 @@ void loop() {
   currentSeconds = millis();
   //regular get sensor data
   rawSensorValue = getAnalogData();
+  System.println("rawSensorValue " + rawSensorValue);
   checkSensorHealth(rawSensorValue);
  
   //checking and geting other functions
@@ -166,9 +168,9 @@ void drawMenu() {
  */
 void calcPressure(uint16_t rawPressureValue) {
   pressureInVoltage = (rawPressureValue * (5/1023));
-  pressure_pascal = (3.0*(pressureInVoltage-0.47))*1000000.0;
+  pressurePascal = (3.0*(pressureInVoltage-0.47))*1000000.0;
   //convert PSI into BAR
-  currentPressureValue = pressure_pascal/10e5;
+  currentPressureValue = pressurePascal/10e5;
   if (currentPressureValue < 0) {
     currentPressureValue = 0;
   };
@@ -240,8 +242,8 @@ uint16_t getAnalogData() {
   const uint8_t SIZE_BUF_ADC = 5;
   uint16_t buf_adc[SIZE_BUF_ADC];
   uint16_t t;
-  byte i;
-  byte j;
+  uint8_t i;
+  uint8_t j;
 
   for (i = 0; i < SIZE_BUF_ADC; i++) {
     buf_adc[i] = analogRead(sensor);
