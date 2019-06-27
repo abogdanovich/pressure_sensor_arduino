@@ -19,7 +19,6 @@
 #define PMIN 2.0    //min for LOW level
 #define PMAX 4.0    //max for HIGH level 
 #define MAX_LCD_WIDTH 16
-
 //-----------------------------
 
 //init libs zone--------------
@@ -36,6 +35,7 @@ unsigned long old_time = 0;
 unsigned long old_time2 = 0;
 unsigned long test_millis = 0;
 unsigned long prev_predict = 0; //start working
+float pressurePascal = 0.0;
 
 //-----------------------------------
 float LOW_PRESSURE = 1.8;
@@ -136,6 +136,16 @@ void drawMenu() {
     lcd.print("low sensor data!");
   }
 
+}
+
+void calcPressure(uint16_t rawPressureValue) {
+  Vout = (analog * (5/1023));
+  pressurePascal = (3.0*(Vout-0.47))*1000000.0;
+  //convert PSI into BAR
+  CURRENT_PRESSURE = pressurePascal/10e5;
+  if (CURRENT_PRESSURE < 0) {
+    CURRENT_PRESSURE = 0;
+  };
 }
 
 //    calc pressure from converted analog signal
