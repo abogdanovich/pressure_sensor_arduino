@@ -115,6 +115,10 @@ void drawMenu() {
 
     uint8_t blocks = (CURRENT_PRESSURE - LOW_PRESSURE) / ((HIGH_PRESSURE - LOW_PRESSURE) / MAX_LCD_WIDTH);
 
+    if (blocks > MAX_LCD_WIDTH) {
+      blocks = 0;
+    }
+
     for (uint8_t i = 15; i > blocks; i--) {
       lcd.setCursor(i, 1); //x,y
       lcd.write(254); //total hours working
