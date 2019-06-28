@@ -7,8 +7,6 @@
 #include <EEPROM.h>
 
 //define zone---------------
-#define b1 6        //left LOW
-#define b2 5        //right HIGH
 #define ledG 9      //green led
 #define ledR 8      //red led
 #define ledY 7      //yellow led
@@ -38,8 +36,8 @@ unsigned long prev_predict = 0; //start working
 float pressurePascal = 0.0;
 
 //-----------------------------------
-float LOW_PRESSURE = 1.8;
-float HIGH_PRESSURE = 2.9;
+float LOW_PRESSURE = 2.2;
+float HIGH_PRESSURE = 3.5;
 //-----------------------------------
 float CURRENT_PRESSURE = 0.0; //current pressure
 float Vout = 0.0; //current pressure
@@ -48,19 +46,10 @@ uint16_t analogV = 0;
 
 void setup() {
   //
-  //  Serial.begin(115200);
-
-  //  try to load variables from EEPPROM arduino
-  LOW_PRESSURE = readDATA(0);
-  if (LOW_PRESSURE == 0.0) LOW_PRESSURE = 1.8;
-
-  HIGH_PRESSURE = readDATA(1);
-  if (HIGH_PRESSURE == 0.0) HIGH_PRESSURE = 2.9;
+  Serial.begin(115200);
 
   current_time = millis();
 
-  pinMode(b1, INPUT);
-  pinMode(b2, INPUT);
   pinMode(ledG, OUTPUT);
   pinMode(ledR, OUTPUT);
   pinMode(ledY, OUTPUT);
@@ -182,9 +171,7 @@ void alarmErorr(void) {
       working = false;
       digitalWrite(ledG, LOW);
       digitalWrite(relay, LOW);
-      digitalWrite(ledY, LOW); //switch ON predict LED
     }
-
   }
 }
 
@@ -202,9 +189,7 @@ void checkPressure() {
     digitalWrite(ledG, LOW);
     digitalWrite(relay, LOW);
     working = false;
-    digitalWrite(ledY, LOW); //switch ON predict LED
   }
-
 }
 
 
@@ -237,53 +222,6 @@ uint16_t getAnalogData(void) {
   }
 
   return buf_adc[(SIZE_BUF_ADC - 1) / 2];
-
-}
-
-
-//    check box buttons
-void checkButtons(unsigned long current_time) {
-
-  if (digitalRead(b1) and ((current_time - old_time) > 200) and !b1Status) {
-
-    old_time = current_time;
-    b1Status = true;
-
-    if (LOW_PRESSURE >= PMIN) {
-      LOW_PRESSURE = 1;
-    }
-    else {
-      LOW_PRESSURE += 0.1;
-    }
-    drawMenu();
-
-
-  }
-  else if (!digitalRead(b1) and b1Status) {
-    b1Status = false;
-    saveDATA(0, LOW_PRESSURE * 10);
-  }
-
-  // check the second button
-
-  if (digitalRead(b2) and ((current_time - old_time2) > 200) and !b2Status) {
-
-    old_time2 = current_time;
-    b2Status = true;
-
-    if (HIGH_PRESSURE >= PMAX) {
-      HIGH_PRESSURE = 2;
-    }
-    else {
-      HIGH_PRESSURE += 0.1;
-    }
-    drawMenu();
-
-  }
-  else if (!digitalRead(b2) and b2Status) {
-    b2Status = false;
-    saveDATA(1, (HIGH_PRESSURE + 0.1) * 10);
-  }
 
 }
 
