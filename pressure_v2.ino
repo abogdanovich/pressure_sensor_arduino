@@ -2,18 +2,19 @@
  * digital pressure 
  * @author Alex Bogdanovich
   */
-#define ledG 9              //green led - RELAY indicator
-#define ledR 8              //red led - error
-#define RELAY 2             //RELAY!
-#define sensor A0           //SENSOR
+#define ledG 9                        //green led - RELAY indicator
+#define ledR 8                        //red led - error
+#define RELAY 2                       //RELAY!
+#define sensor A0                     //SENSOR
 #define MAX_LCD_WIDTH 16
 #define MAX_LCD_HEIGHT 2
 #define MIN_SENSOR_VALUE 50
 #define MAX_SENSOR_VALUE 800
-#define MILLIS_1H_THRESHOLD 60*60*1000 //each 1 hours save
+#define MILLIS_1H_THRESHOLD 3600000   //60*60*1000 - each 1 hours save
 #define HOURS_IN_DAY 24
 #define EEPROM_WORKING_HOURS_DATA 2
 #define EEPROM_WORKING_DAYS_DATA 3
+#define VOLTAGE_STEP 0.004887
 
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
@@ -38,30 +39,28 @@ float highPressure = 3.5;
 uint16_t rawSensorValue = 0;      //analog signal value
 float currentPressureValue = 0.0; //current pressure
 float pressureInVoltage = 0.0;
-float pressurePascal = 0.0;
+float pressure_pascal = 0.0;
 
 /**
  * setup method that allows to init system
  */
 void setup() {
-  Serial.begin(115200);
+  //load the data from EEPPROM memory hours and days of work
   byte totalWorkingHours_temp = readEEPROMPressureData(EEPROM_WORKING_HOURS_DATA);  
-  Serial.println("totalWorkingHours_temp "+totalWorkingHours_temp);
   if (totalWorkingHours_temp > 0) {
     totalWorkingHours = totalWorkingHours_temp;
   }
-  
+  //load the data from EEPPROM memory hours and days of work
   byte totalWorkingDays_temp = readEEPROMPressureData(EEPROM_WORKING_DAYS_DATA);  
-  Serial.println("totalWorkingDays_temp "+totalWorkingDays_temp);
   if (totalWorkingDays_temp > 0) {
     totalWorkingDays = totalWorkingDays_temp;
   }
-  
+  //init buttons
   pinMode(sensor, INPUT);
   pinMode(ledG, OUTPUT);
   pinMode(ledR, OUTPUT);
   pinMode(RELAY, OUTPUT);
-
+  
   rawSensorValue = getAnalogData();
   calcPressure(rawSensorValue);
   lcd.init();
@@ -76,11 +75,8 @@ void setup() {
 
 void loop() {
   currentSeconds = millis();
-  //regular get sensor data
   rawSensorValue = getAnalogData();
-  System.println("rawSensorValue " + rawSensorValue);
   checkSensorHealth(rawSensorValue);
- 
   //checking and geting other functions
   if (!systemError) {
     checkPressure();
@@ -88,7 +84,6 @@ void loop() {
   }
   drawMenu();
   calcAndSaveTotalWork(currentSeconds);
-  delay(1);
 }
 
 /**
@@ -167,13 +162,13 @@ void drawMenu() {
  * calc pressure from converted analog signal
  */
 void calcPressure(uint16_t rawPressureValue) {
-  pressureInVoltage = (rawPressureValue * (5/1023));
-  pressurePascal = (3.0*(pressureInVoltage-0.47))*1000000.0;
+  pressureInVoltage = (rawPressureValue * VOLTAGE_STEP);
+  pressure_pascal = (3.0*(pressureInVoltage-0.47))*1000000.0;
   //convert PSI into BAR
-  currentPressureValue = pressurePascal/10e5;
+  currentPressureValue = pressure_pascal/10e5;
   if (currentPressureValue < 0) {
     currentPressureValue = 0;
-  };
+  }
 }
 
 /**
@@ -190,7 +185,9 @@ void checkSensorHealth(uint16_t analog) {
   }
 }
 
-//    alarm error
+/**
+ * alarm error allows to disable the system and save the pump
+ */
 void alarmErorr() {
   if (systemError) {
     ON(ledR);
@@ -202,6 +199,9 @@ void alarmErorr() {
   }
 }
 
+/**
+ * count pump working hours by converting from millis into hours
+ */
 void countPumpWorkingTime() {
     totalWorkingMillis += (millis() - timerWorkingStartStop);
     if ((totalWorkingMillis / MILLIS_1H_THRESHOLD) >= 1) {
@@ -211,7 +211,7 @@ void countPumpWorkingTime() {
 }
 
 /**
- * check and control main RELAY
+ * check and control the main RELAY
  */
 void checkPressure() {
   if (currentPressureValue <= lowPressure && isWorking == false) {
@@ -242,15 +242,15 @@ uint16_t getAnalogData() {
   const uint8_t SIZE_BUF_ADC = 5;
   uint16_t buf_adc[SIZE_BUF_ADC];
   uint16_t t;
-  uint8_t i;
-  uint8_t j;
+  byte i;
+  byte j;
 
   for (i = 0; i < SIZE_BUF_ADC; i++) {
     buf_adc[i] = analogRead(sensor);
     delay(50);
   }
 
-  //take mediana from buffer
+  //take the mediana from buffer
   for (i = 0; i < SIZE_BUF_ADC; i++) {
     for (j = 0; j < SIZE_BUF_ADC - i - 1; j++) {
       if (buf_adc[j] > buf_adc[j + 1]) {
