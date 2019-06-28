@@ -9,7 +9,6 @@
 //define zone---------------
 #define ledG 9      //green led
 #define ledR 8      //red led
-#define ledY 7      //yellow led
 #define relay 2     //relay
 #define sensor A0
 #define dV 0.004    //5/1023 - each 5V via analog signal
@@ -52,7 +51,6 @@ void setup() {
 
   pinMode(ledG, OUTPUT);
   pinMode(ledR, OUTPUT);
-  pinMode(ledY, OUTPUT);
   pinMode(relay, OUTPUT);
   pinMode(sensor, INPUT);
 
@@ -65,7 +63,6 @@ void setup() {
   lcd.clear();
   drawMenu();
   digitalWrite(ledG, LOW);
-  digitalWrite(ledY, LOW);
   digitalWrite(ledR, LOW);
 
   test_millis = current_time;
@@ -85,7 +82,6 @@ void loop() {
     getPressure(analogV);
   }
   drawMenu();
-  checkButtons(current_time);
 }
 
 //    update menu items
@@ -128,7 +124,7 @@ void drawMenu() {
 }
 
 void calcPressure(uint16_t rawPressureValue) {
-  Vout = (analog * (5/1023));
+  Vout = (analogV * (5/1023));
   pressurePascal = (3.0*(Vout-0.47))*1000000.0;
   //convert PSI into BAR
   CURRENT_PRESSURE = pressurePascal/10e5;
