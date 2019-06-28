@@ -10,11 +10,14 @@
 #define MAX_LCD_HEIGHT 2
 #define MIN_SENSOR_VALUE 50
 #define MAX_SENSOR_VALUE 800
-#define MILLIS_1H_THRESHOLD 3600000   //60*60*1000 - each 1 hours save
+#define MILLIS_IN_1H 3600000            //60*60*1000 - each 1 hours save
+#define MILLIS_IN_1MIN 60000            //1000*60
+#define MILLIS_IN_1DAY 86400000         //60*60*1000*24
 #define HOURS_IN_DAY 24
 #define EEPROM_WORKING_HOURS_DATA 2
 #define EEPROM_WORKING_DAYS_DATA 3
 #define VOLTAGE_STEP 0.004887
+#define ANIMATION_DELAY1 100
 
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
@@ -33,7 +36,7 @@ byte totalWorkingHours = 0; //display and save/load in days 0-255 1 bit
 unsigned long totalWorkingMillis = 0; //display and save/load in days 0-255 1 bit
 byte totalWorkingDays = 0; //display and save/load in days 0-255 1 bit
 
-float lowPressure = 2.3;
+float lowPressure = 2.2;
 float highPressure = 3.5;
 
 uint16_t rawSensorValue = 0;      //analog signal value
@@ -55,6 +58,7 @@ void setup() {
   if (totalWorkingDays_temp > 0) {
     totalWorkingDays = totalWorkingDays_temp;
   }
+ 
   //init buttons
   pinMode(sensor, INPUT);
   pinMode(ledG, OUTPUT);
@@ -73,6 +77,9 @@ void setup() {
   OFF(ledR);
 }
 
+/**
+ * main loop method
+ */
 void loop() {
   currentSeconds = millis();
   rawSensorValue = getAnalogData();
@@ -91,7 +98,7 @@ void loop() {
  * EEPROM (100,000/24/365) write/erase cycles ~ 11 years for writing each hour
  */
  void calcAndSaveTotalWork(unsigned long currentSeconds) {
-  if ((currentSeconds - timerStart3) > MILLIS_1H_THRESHOLD) {
+  if ((currentSeconds - timerStart3) > MILLIS_IN_1H) {
     if (!isWorking) {
       //save data to EEPPROM when we do not work
       if (totalWorkingHours >= HOURS_IN_DAY) {
@@ -115,40 +122,48 @@ void drawMenu() {
     lcd.setCursor(0, 0); 
     lcd.print("H:");
     lcd.setCursor(2, 0); 
-    lcd.print(highPressure);
+    lcd.print(highPressure, 1);
   
     lcd.setCursor(0, 1); 
     lcd.print("L:");
     lcd.setCursor(2, 1); 
-    lcd.print(lowPressure);
-  
-    lcd.setCursor(5, 0); 
-    lcd.print("|");
-    lcd.setCursor(5, 1); 
-    lcd.print("|");
-  
-    lcd.setCursor(7, 0); 
-    lcd.print(currentPressureValue);
-    lcd.setCursor(12, 0); 
+    lcd.print(lowPressure, 1);
+
+    if (isWorking) {
+      drawWorkingBar();
+    } else {
+      lcd.setCursor(5, 0); 
+      lcd.print("|");
+      lcd.setCursor(5, 1); 
+      lcd.print("|");
+    }
+    lcd.setCursor(6, 0); 
+    lcd.print(currentPressureValue, 1);
+    lcd.setCursor(10, 0); 
     lcd.print("bar");
   
      
     //total hours \ days totalWorkingMillis | totalWorkingHours | totalWorkingDays
-    if (totalWorkingHours > 1) {
-      lcd.setCursor(7, 1);
+    if (totalWorkingDays > 1) {
+      lcd.setCursor(6, 1);
+      lcd.print(totalWorkingDays);
+      lcd.setCursor(10, 1); 
+      lcd.print("days");
+    } else if (totalWorkingHours > 1) {
+      lcd.setCursor(6, 1);
       lcd.print(totalWorkingHours);
-      lcd.setCursor(12, 1); 
-      lcd.print("h");
-    } else if (totalWorkingMillis > 1000*60) {
-      lcd.setCursor(7, 1);
+      lcd.setCursor(10, 1); 
+      lcd.print("hours");
+    } else if (totalWorkingMillis > MILLIS_IN_1MIN) {
+      lcd.setCursor(6, 1);
       lcd.print(totalWorkingMillis/1000/60);
-      lcd.setCursor(12, 1); 
-      lcd.print("m");
+      lcd.setCursor(10, 1); 
+      lcd.print("min");
     } else {
-      lcd.setCursor(7, 1);
+      lcd.setCursor(6, 1);
       lcd.print(totalWorkingMillis/1000);
-      lcd.setCursor(12, 1); 
-      lcd.print("s");
+      lcd.setCursor(10, 1); 
+      lcd.print("sec");
     }
     
   }   
@@ -156,6 +171,24 @@ void drawMenu() {
     lcd.setCursor(0, 1); 
     lcd.print("low sensor data!");
   }
+}
+
+/**
+ * draw animation for working pump
+ */
+void drawWorkingBar() {
+  delay(ANIMATION_DELAY1);
+  lcd.setCursor(5, 0); 
+  lcd.write(254);
+  lcd.setCursor(5, 1); 
+  lcd.write(255);
+  delay(ANIMATION_DELAY1);
+  delay(ANIMATION_DELAY1);
+  lcd.setCursor(5, 0); 
+  lcd.write(255);
+  lcd.setCursor(5, 1); 
+  lcd.write(254);
+  delay(ANIMATION_DELAY1);  
 }
 
 /**
@@ -204,9 +237,9 @@ void alarmErorr() {
  */
 void countPumpWorkingTime() {
     totalWorkingMillis += (millis() - timerWorkingStartStop);
-    if ((totalWorkingMillis / MILLIS_1H_THRESHOLD) >= 1) {
+    if ((totalWorkingMillis / MILLIS_IN_1H) >= 1) {
       totalWorkingHours++; //inc working hours
-      totalWorkingMillis -= MILLIS_1H_THRESHOLD;
+      totalWorkingMillis -= MILLIS_IN_1H;
     }
 }
 
