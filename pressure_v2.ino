@@ -11,11 +11,13 @@
 #define MIN_SENSOR_VALUE 50
 #define MAX_SENSOR_VALUE 800
 #define MILLIS_IN_1H 3600000            //60*60*1000 - each 1 hours save
+#define MINS_IN_1H 60
 #define MILLIS_IN_1MIN 60000            //1000*60
 #define MILLIS_IN_1DAY 86400000         //60*60*1000*24
 #define HOURS_IN_DAY 24
 #define EEPROM_WORKING_HOURS_DATA 2
 #define EEPROM_WORKING_DAYS_DATA 3
+#define EEPROM_WORKING_MINS_DATA 4
 #define VOLTAGE_STEP 0.004887
 #define ANIMATION_DELAY1 100
 
@@ -32,9 +34,10 @@ unsigned long currentSeconds = 0;
 unsigned long timerStart3 = 0;
 unsigned long timerWorkingStartStop = 0;
 
-byte totalWorkingHours = 0; //display and save/load in days 0-255 1 bit
+byte totalWorkingHours = 0; //display and save/load in hours 0-255 1 bit
 unsigned long totalWorkingMillis = 0; //display and save/load in days 0-255 1 bit
 byte totalWorkingDays = 0; //display and save/load in days 0-255 1 bit
+byte totalWorkingMins = 0;
 
 float lowPressure = 2.2;
 float highPressure = 3.5;
@@ -48,6 +51,12 @@ float pressure_pascal = 0.0;
  * setup method that allows to init system
  */
 void setup() {
+  //load the data from EEPPROM memory mins of work
+  byte totalWorkingMins_temp = readEEPROMPressureData(EEPROM_WORKING_MINS_DATA);  
+  if (totalWorkingMins_temp > 0) {
+    totalWorkingMins = totalWorkingMins_temp;
+  }
+  
   //load the data from EEPPROM memory hours and days of work
   byte totalWorkingHours_temp = readEEPROMPressureData(EEPROM_WORKING_HOURS_DATA);  
   if (totalWorkingHours_temp > 0) {
@@ -90,28 +99,8 @@ void loop() {
     calcPressure(rawSensorValue);
   }
   drawMenu();
-  calcAndSaveTotalWork(currentSeconds);
 }
 
-/**
- * Calculate total working hours\days and save the data into EEPROM
- * EEPROM (100,000/24/365) write/erase cycles ~ 11 years for writing each hour
- */
- void calcAndSaveTotalWork(unsigned long currentSeconds) {
-  if ((currentSeconds - timerStart3) > MILLIS_IN_1H) {
-    if (!isWorking) {
-      //save data to EEPPROM when we do not work
-      if (totalWorkingHours >= HOURS_IN_DAY) {
-        totalWorkingDays++;
-        totalWorkingHours -= HOURS_IN_DAY;
-        saveEEPROMPressureData(EEPROM_WORKING_HOURS_DATA, totalWorkingHours);  
-        saveEEPROMPressureData(EEPROM_WORKING_DAYS_DATA, totalWorkingDays);  
-      } else {
-        saveEEPROMPressureData(EEPROM_WORKING_HOURS_DATA, totalWorkingHours);    
-      }
-    }
-  }
- }
 
 /**
  * Update LCD menu items 16*2
@@ -143,29 +132,21 @@ void drawMenu() {
     lcd.print("bar");
   
      
-    //total hours \ days totalWorkingMillis | totalWorkingHours | totalWorkingDays
-    if (totalWorkingDays > 1) {
-      lcd.setCursor(6, 1);
-      lcd.print(totalWorkingDays);
-      lcd.setCursor(10, 1); 
-      lcd.print("days");
-    } else if (totalWorkingHours > 1) {
-      lcd.setCursor(6, 1);
-      lcd.print(totalWorkingHours);
-      lcd.setCursor(10, 1); 
-      lcd.print("hours");
-    } else if (totalWorkingMillis > MILLIS_IN_1MIN) {
-      lcd.setCursor(6, 1);
-      lcd.print(totalWorkingMillis/1000/60);
-      lcd.setCursor(10, 1); 
-      lcd.print("min");
-    } else {
-      lcd.setCursor(6, 1);
-      lcd.print(totalWorkingMillis/1000);
-      lcd.setCursor(10, 1); 
-      lcd.print("sec");
-    }
+    //total hours \ days totalWorkingMillis | totalWorkingMins | totalWorkingHours | totalWorkingDays
+    lcd.setCursor(6, 1);
+    lcd.print(totalWorkingMins); 
+    lcd.setCursor(8, 1); 
+    lcd.print("m"); //totalWorkingHours
     
+    lcd.setCursor(9, 1);
+    lcd.print(totalWorkingHours); 
+    lcd.setCursor(11, 1); 
+    lcd.print("h"); 
+
+    lcd.setCursor(12, 1);
+    lcd.print(totalWorkingDays); 
+    lcd.setCursor(15, 1); 
+    lcd.print("d"); 
   }   
   else {
     lcd.setCursor(0, 1); 
@@ -233,13 +214,29 @@ void alarmErorr() {
 }
 
 /**
- * count pump working hours by converting from millis into hours
+ * count pump working hours by converting from millis into hours-days
+ * and save into EEPROM each hours++
  */
 void countPumpWorkingTime() {
+    boolean saveToEEPROM = false;
     totalWorkingMillis += (millis() - timerWorkingStartStop);
-    if ((totalWorkingMillis / MILLIS_IN_1H) >= 1) {
-      totalWorkingHours++; //inc working hours
-      totalWorkingMillis -= MILLIS_IN_1H;
+    if (totalWorkingMillis >= MILLIS_IN_1MIN) {
+      totalWorkingMillis -= MILLIS_IN_1MIN;
+      totalWorkingMins++;
+      if (totalWorkingMins >= MINS_IN_1H) {
+        totalWorkingMins -= MINS_IN_1H;
+        totalWorkingHours++;
+        saveToEEPROM = true;        
+        if (totalWorkingHours >= HOURS_IN_DAY) {
+          totalWorkingHours -= HOURS_IN_DAY;
+          totalWorkingDays++;
+        }
+      }
+      if (saveToEEPROM) {
+        saveEEPROMPressureData(EEPROM_WORKING_MINS_DATA, totalWorkingMins);  
+        saveEEPROMPressureData(EEPROM_WORKING_HOURS_DATA, totalWorkingHours);  
+        saveEEPROMPressureData(EEPROM_WORKING_DAYS_DATA, totalWorkingDays);  
+      }
     }
 }
 
