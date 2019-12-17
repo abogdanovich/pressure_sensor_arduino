@@ -94,8 +94,8 @@ void loop() {
   rawSensorValue = getAnalogData();
   checkSensorHealth(rawSensorValue);
   //checking and geting other functions
+  checkPressure();
   if (!systemError) {
-    checkPressure();
     calcPressure(rawSensorValue);
   }
   drawMenu();
@@ -106,7 +106,6 @@ void loop() {
  * Update LCD menu items 16*2
  */
 void drawMenu() {
-  
   if (!systemError) {
     lcd.setCursor(0, 0); 
     lcd.print("H:");
@@ -244,7 +243,7 @@ void countPumpWorkingTime() {
  * check and control the main RELAY
  */
 void checkPressure() {
-  if (currentPressureValue <= lowPressure && isWorking == false) {
+  if (currentPressureValue <= lowPressure) {
     ON(ledG);
     ON(RELAY);
     isWorking = true;
@@ -253,7 +252,7 @@ void checkPressure() {
     //
     ON(LED_BUILTIN);
   }
-  else if (currentPressureValue >= highPressure && isWorking == true) {
+  else if (currentPressureValue >= highPressure) {
     lcd.clear();
     OFF(ledG);
     OFF(RELAY);
