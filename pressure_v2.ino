@@ -39,8 +39,8 @@ unsigned long totalWorkingMillis = 0; //display and save/load in days 0-255 1 bi
 byte totalWorkingDays = 0; //display and save/load in days 0-255 1 bit
 byte totalWorkingMins = 0;
 
-float lowPressure = 2.2;
-float highPressure = 3.5;
+float lowPressure = 3.0;
+float highPressure = 4.5;
 
 uint16_t rawSensorValue = 0;      //analog signal value
 float currentPressureValue = 0.0; //current pressure
@@ -93,9 +93,10 @@ void loop() {
   currentSeconds = millis();
   rawSensorValue = getAnalogData();
   checkSensorHealth(rawSensorValue);
+  checkHighPressureValue();
   //checking and geting other functions
-  checkPressure();
   if (!systemError) {
+    checkPressure();
     calcPressure(rawSensorValue);
   }
   drawMenu();
@@ -129,7 +130,6 @@ void drawMenu() {
     lcd.print(currentPressureValue, 1);
     lcd.setCursor(10, 0); 
     lcd.print("bar");
-  
      
     //total hours \ days totalWorkingMillis | totalWorkingMins | totalWorkingHours | totalWorkingDays
     lcd.setCursor(6, 1);
@@ -199,6 +199,17 @@ void checkSensorHealth(uint16_t analog) {
 }
 
 /**
+ * stop RELAY in case if RELAY is not disabled properly in time
+ */
+void checkHighPressureValue() {
+  if (currentPressureValue > highPressure) {
+    OFF(RELAY);
+    OFF(ledG);
+    OFF(ledR);
+  }
+}
+
+/**
  * alarm error allows to disable the system and save the pump
  */
 void alarmErorr() {
@@ -243,23 +254,20 @@ void countPumpWorkingTime() {
  * check and control the main RELAY
  */
 void checkPressure() {
-  if (currentPressureValue <= lowPressure) {
+  if (currentPressureValue <= lowPressure && isWorking == false) {
     ON(ledG);
     ON(RELAY);
     isWorking = true;
     //start counting working millis
     timerWorkingStartStop = millis();
-    //
-    ON(LED_BUILTIN);
   }
-  else if (currentPressureValue >= highPressure) {
+  else if (currentPressureValue >= highPressure && isWorking == true) {
     lcd.clear();
     OFF(ledG);
     OFF(RELAY);
     isWorking = false;
     //count working millis
     countPumpWorkingTime();
-    OFF(LED_BUILTIN);
   }
 }
 
