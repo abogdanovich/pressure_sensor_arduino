@@ -39,8 +39,8 @@ unsigned long totalWorkingMillis = 0; //display and save/load in days 0-255 1 bi
 byte totalWorkingDays = 0; //display and save/load in days 0-255 1 bit
 byte totalWorkingMins = 0;
 
-float lowPressure = 3.0;
-float highPressure = 4.5;
+float lowPressure = 4.5;
+float highPressure = 5.0;
 
 uint16_t rawSensorValue = 0;      //analog signal value
 float currentPressureValue = 0.0; //current pressure
